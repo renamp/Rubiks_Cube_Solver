@@ -1,0 +1,6 @@
+[submodule "Rubiks_Cube_Compiler"]
+	path = Rubiks_Cube_Compiler
+	url = git@github.com:renamp/Rubiks_Cube_Compiler.git
+[submodule "Rubiks_Cube_Player"]
+	path = Rubiks_Cube_Player
+	url = git@github.com:renamp/Rubiks_Cube_Player.git
