@@ -1,6 +1,15 @@
 # Prerequisites
 *.d
 
+*.bin
+*.eep
+*.asm
+*.lss
+*.srec
+*.mk
+Makefile
+
+
 # Object files
 *.o
 *.ko
