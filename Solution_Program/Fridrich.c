@@ -1,4 +1,4 @@
-#include DriverMotor2.c
+#include DriverMotor.inc
 
 void Cruz(){
 	if( m[5][4] == m[5][1] || m[5][4] == m[5][3] || m[5][4] == m[5][5] || m[5][4] == m[5][7] ){
