@@ -5,6 +5,9 @@
  *  Author: Renan
  */ 
 
+#ifndef UART_H_
+#define UART_H_
+
 #define F_CPU 8000000
 
 #include "avr/io.h"
@@ -17,3 +20,4 @@ char UART_DataIsReady( );
 
 unsigned char UART_Read( );
 
+#endif /* UART_H_ */

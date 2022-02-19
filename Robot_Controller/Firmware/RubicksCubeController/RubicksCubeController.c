@@ -54,6 +54,8 @@ uint8_t timeServo,MenuState;
 uint8_t servo1[8], servo2[2], servo3[3], servo1Index, servo2Index, servo3Index;
 uint8_t servo1Position, servo2Position, servo3Position;
 
+const PORT spi_clock_port = {&PORTB, &DDRB, &PINB, PINB5};
+
 void Interpretador(uint32_t AdrMAIN, uint32_t PC, uint8_t MovList[]);
 
 void piscaLed(int led1 , int led2){
@@ -61,19 +63,19 @@ void piscaLed(int led1 , int led2){
 	if( led2 > maior ) maior = led2;
 	
 	for( int i=0; i<maior; i++){
-		if( i<led2 ) setbit(PORTC, 0);
-		if( i<led1 ) setbit(PORTC, 1);
+		if( i<led2 ) SETBIT(PORTC, 0);
+		if( i<led1 ) SETBIT(PORTC, 1);
 		_delay_ms(150);
 		
-		clearbit(PORTC, 0);
-		clearbit(PORTC, 1);
+		RSTBIT(PORTC, 0);
+		RSTBIT(PORTC, 1);
 		_delay_ms(150);
 	}
 }
 
 void piscaData(uint8_t data ){
 	for( int j=7; j>=0; j--){
-		if( testbit(data, j) ) piscaLed(1,0);
+		if( GETBIT(data, j) ) piscaLed(1,0);
 		else piscaLed(0,1);
 	}
 	_delay_ms(1000);
@@ -100,13 +102,13 @@ void ADDMovimento( int face, uint8_t MovList[] ){
 	// se for movimento na mesma face
 	if( MovListIndex>0 && (MovList[MovListIndex-1]&7) == (face&7) ) {
 		// se dois movimentos
-		if( testbit(MovList[MovListIndex-1], 4) ){
-			if( testbit(face, 3) ) MovList[MovListIndex-1] = (face&7);
+		if( GETBIT(MovList[MovListIndex-1], 4) ){
+			if( GETBIT(face, 3) ) MovList[MovListIndex-1] = (face&7);
 			else MovList[MovListIndex-1] = (face&7)+8;
 		}
 		else {
 			// se dois movimentos iguais ( adiciona parametro de duas voltas)
-			if( testbit(MovList[MovListIndex-1],3) == testbit(face, 3) ) MovList[MovListIndex-1] = (face&7)+16;
+			if( GETBIT(MovList[MovListIndex-1],3) == GETBIT(face, 3) ) MovList[MovListIndex-1] = (face&7)+16;
 			// se movimentos contrarios ( remove movimento anterior)
 			else MovListIndex--;
 		}
@@ -132,7 +134,7 @@ void Move( uint8_t face, uint8_t MovList[] ){
 		
 		for(j=0; j<25; j++,adr++){
 			buffer = EEPROM_read(adr++);
-			if(testbit(buffer, 8)){			// se operandor temp
+			if(GETBIT(buffer, 8)){			// se operandor temp
 				op1 = (buffer & 0x0F);
 				buffer = EEPROM_read(adr);
 				temp[op1] = m[buffer >> 4][buffer & 0x0F];
@@ -141,7 +143,7 @@ void Move( uint8_t face, uint8_t MovList[] ){
 				op2 = (buffer & 0x0F);
 				op1 = buffer >> 4;
 				buffer = EEPROM_read(adr);
-				if(testbit(buffer, 8))			// se operandor temp
+				if(GETBIT(buffer, 8))			// se operandor temp
 				m[op1][op2] = temp[buffer & 0x0F];
 				else
 				m[op1][op2] = m[buffer >> 4][buffer & 0x0F];
@@ -149,8 +151,6 @@ void Move( uint8_t face, uint8_t MovList[] ){
 		}
 	}
 }
-
-
 
 void wait(uint8_t time){
 	for(uint8_t i=0; i<time; i++ ){
@@ -165,13 +165,13 @@ void ServoLoad(){
 }
 
 void Servo_Init(){
-	setbit(DDRC, 3);
-	setbit(DDRC, 4);
-	setbit(DDRC, 5);
+	SETBIT(DDRC, 3);
+	SETBIT(DDRC, 4);
+	SETBIT(DDRC, 5);
 	
-	clearbit(PORTC, 3);
-	clearbit(PORTC, 4);
-	clearbit(PORTC, 5);
+	RSTBIT(PORTC, 3);
+	RSTBIT(PORTC, 4);
+	RSTBIT(PORTC, 5);
 	
 	
 	timeServo = 0;
@@ -186,20 +186,20 @@ void Servo_Init(){
 
 void ServosUpdate( ){
 
-	setbit(PORTC, 3);
+	SETBIT(PORTC, 3);
 	_delay_us(600);
 	wait(servo1[servo1Index]);
-	clearbit(PORTC, 3);
+	RSTBIT(PORTC, 3);
 	
-	setbit(PORTC, 4);
+	SETBIT(PORTC, 4);
 	_delay_us(600);
 	wait(servo2[servo2Index]);
-	clearbit(PORTC, 4);
+	RSTBIT(PORTC, 4);
 	
-	setbit(PORTC, 5);
+	SETBIT(PORTC, 5);
 	_delay_us(600);
 	wait(servo3[servo3Index]);
-	clearbit(PORTC, 5);
+	RSTBIT(PORTC, 5);
 }
 
 /////////////////////////////////////////////////
@@ -219,7 +219,7 @@ ISR( TIMER0_OVF_vect ){
 void SetMov( uint8_t movimento ){
 	uint8_t posicao = (movimento & 0x03);
 	// se Rotacionar Face
-	if( testbit(movimento, 2 ) ){
+	if( GETBIT(movimento, 2 ) ){
 		servo2Index = 1;			// abaixa apoio lateral
 		_delay_ms(300);				// espera 100 ms
 		int delay = 350;
@@ -237,7 +237,7 @@ void SetMov( uint8_t movimento ){
 	}
 	
 	// se Rotacionar Base
-	else if( testbit( movimento, 3 ) ){
+	else if( GETBIT( movimento, 3 ) ){
 		// Atualiza orientacao do Cubo
 		uint8_t vezes=0;
 		if(servo1Index==1 ) vezes = posicao;
@@ -259,7 +259,7 @@ void SetMov( uint8_t movimento ){
 	}
 	
 	// Mudar Face
-	else if( testbit( movimento, 4 ) ){
+	else if( GETBIT( movimento, 4 ) ){
 		for( int i=0; i<posicao; i++ ){
 			// Atualiza Orientacao do Cubo
 			orientacaoCubo = centroCubo[0];
@@ -281,7 +281,7 @@ void SetMov2( uint8_t movimento ){
 	uint8_t posicao = (movimento & 0x03);
 	
 	// se Rotacionar Face
-	if( testbit(movimento, 2 ) ){
+	if( GETBIT(movimento, 2 ) ){
 		servo2Index = 1;			// abaixa apoio lateral
 		//		_delay_ms(200);				// espera 100 ms
 		
@@ -299,7 +299,7 @@ void SetMov2( uint8_t movimento ){
 	}
 	
 	// se Rotacionar Base
-	else if( testbit( movimento, 3 ) ){
+	else if( GETBIT( movimento, 3 ) ){
 		// Atualiza orientacao do Cubo
 		uint8_t vezes=0;
 		if(servo1Index==1 ) vezes = posicao;
@@ -322,7 +322,7 @@ void SetMov2( uint8_t movimento ){
 	}
 	
 	// Mudar Face
-	else if( testbit( movimento, 4 ) ){
+	else if( GETBIT( movimento, 4 ) ){
 		for( int i=0; i<posicao; i++ ){
 			// Atualiza Orientacao do Cubo
 			orientacaoCubo = centroCubo[0];
@@ -358,6 +358,7 @@ void Interpretador(uint32_t AdrMAIN, uint32_t PC, uint8_t MovList[]){
 	uint8_t indexPC, control;
 	uint32_t PCn1, PCn2, stackPC[12];
 	int8_t Vars[30];
+	uint32_t tempLong;
 	
 	//uint16_t movListIndex = 0;
 	uint16_t i;
@@ -371,8 +372,6 @@ void Interpretador(uint32_t AdrMAIN, uint32_t PC, uint8_t MovList[]){
 	PCn2 = 0;
 	ServoListIndex = 0;
 	
-	SD_SendCMDCRC(16, 16,0);
-	
 	cli();	// desativa interrupcoes
 	
 	// determina posicao da base do Cubo
@@ -381,21 +380,20 @@ void Interpretador(uint32_t AdrMAIN, uint32_t PC, uint8_t MovList[]){
 	else if( servo1Index == 1) baseCubo = 0;
 	else if( servo1Index == 7) baseCubo = 2;
 	
-	while( !testbit(control, 0) ){
-		//Carrega Setor
+	while( !GETBIT(control, 0) ){
 		CarregaSetor:
-		SD_SendCMDCRC(17, ((PC&0x00FFFFFF)*512)+AdrMAIN + (((PC&0xFF000000)>>24) * 16), 0); SD_EsperaToken();
-		
-		// Carrega Instrucao
-		for( i=0; i<16; i++) SDbuffer[i] = SD_Read(); 
-		SD_Read(); SD_Read(); SD_Read(); //  crc
+		{
+			//uint32_t tempLong;
+			tempLong = ((PC&0x00FFFFFF)*512)+AdrMAIN + (((PC&0xFF000000)>>24) * 16);
+			SD_ReadSingleBlock(tempLong, 16, SDbuffer);
+		}
 		
 		PC += 0x01000000;
 		if( (PC&0xFF000000) == 0x20000000 ){	PC++; PC &= 0x00FFFFFF; }
 		
 		// Operacao "if" - Inicio
 		if( SDbuffer[0] == 0x21 ){
-			clearbit(control, 1);								// Estado False
+			RSTBIT(control, 1);								// Estado False
 			PCn1 =  SDbuffer[1];		PCn1<<=8;
 			PCn1 |= SDbuffer[2];		PCn1<<=8;
 			PCn1 |= SDbuffer[3];		PCn1<<=8;
@@ -427,43 +425,43 @@ void Interpretador(uint32_t AdrMAIN, uint32_t PC, uint8_t MovList[]){
 			
 			// Verifica Aritmetica
 			if( SDbuffer[6] == 0x81 ){									// Aritmetica "=="
-				if( operador1 == operador2 ) setbit(control, 1);
-				else clearbit(control, 1);
+				if( operador1 == operador2 ) SETBIT(control, 1);
+				else RSTBIT(control, 1);
 			}
 			else if( SDbuffer[6] == 0x82 ){								// Aritmetica "!="
-				if( operador1 != operador2 ) setbit(control, 1);
-				else clearbit(control, 1);
+				if( operador1 != operador2 ) SETBIT(control, 1);
+				else RSTBIT(control, 1);
 			}
 			else if( SDbuffer[6] == 0x83 ){								// Aritmetica ">"
-				if( operador1 > operador2 ) setbit(control, 1);
-				else clearbit(control, 1);
+				if( operador1 > operador2 ) SETBIT(control, 1);
+				else RSTBIT(control, 1);
 			}
 			else if( SDbuffer[6] == 0x84 ){								// Aritmetica "<"
-				if( operador1 < operador2 ) setbit(control, 1);
-				else clearbit(control, 1);
+				if( operador1 < operador2 ) SETBIT(control, 1);
+				else RSTBIT(control, 1);
 			}
 			else if( SDbuffer[6] == 0x85 ){								// Aritmetica ">="
-				if( operador1 >= operador2 ) setbit(control, 1);
-				else clearbit(control, 1);
+				if( operador1 >= operador2 ) SETBIT(control, 1);
+				else RSTBIT(control, 1);
 			}
 			else if( SDbuffer[6] == 0x86 ){								// Aritmetica "<="
-				if( operador1 <= operador2 ) setbit(control, 1);
-				else clearbit(control, 1);
+				if( operador1 <= operador2 ) SETBIT(control, 1);
+				else RSTBIT(control, 1);
 			}
 			
 			// Verifica Proxima Operacao ou Fim "if"
 			if( SDbuffer[7] == 0x80 ){							// Fim Condicoes
-				if( !testbit(control, 1) ){
+				if( !GETBIT(control, 1) ){
 					PC = PCn2;									// Jump Falso
 					goto CarregaSetor;							// Carrega o setor
 				}
 			}
 			else if( SDbuffer[7] == 0x81 ){						// Operador &&
-				if( !testbit(control, 1) ){
+				if( !GETBIT(control, 1) ){
 				PC = PCn2;	goto CarregaSetor;	}				// Jump Falso
 			}
 			else if( SDbuffer[7] == 0x82 ){						// Operador ||
-				if( testbit(control, 1) ){
+				if( GETBIT(control, 1) ){
 				PC = PCn1;	goto CarregaSetor;	}				// Jump Verdadeiro
 			}
 		}
@@ -479,7 +477,7 @@ void Interpretador(uint32_t AdrMAIN, uint32_t PC, uint8_t MovList[]){
 				operador2 = Vars[SDbuffer[3]];
 			
 			// carrega operado 3
-			if( testbit(SDbuffer[5], 7) )					// Operador 3 � uma Variavel
+			if( GETBIT(SDbuffer[5], 7) )					// Operador 3 � uma Variavel
 				operador3 = Vars[SDbuffer[6]];
 			else											// Operado 3 � um Numero
 				operador3 = SDbuffer[6];
@@ -549,7 +547,7 @@ void Interpretador(uint32_t AdrMAIN, uint32_t PC, uint8_t MovList[]){
 				
 				listBracos[ServoListIndex] = 0;
 	//			orientacaoCubo = SDbuffer[3];	
-				setbit(control, 0);							// Sai Loop Principal
+				SETBIT(control, 0);							// Sai Loop Principal
 			}
 		}
 		
@@ -559,7 +557,7 @@ void Interpretador(uint32_t AdrMAIN, uint32_t PC, uint8_t MovList[]){
 				for( uint8_t index=3; SDbuffer[index] != 0; index++){
 					listBracos[ServoListIndex++] = SDbuffer[index];
 					
-					if( testbit( SDbuffer[index], 3) ) baseCubo = SDbuffer[index]&0x03;
+					if( GETBIT( SDbuffer[index], 3) ) baseCubo = SDbuffer[index]&0x03;
 				}
 //				orientacaoCubo = SDbuffer[2];
 				
@@ -569,7 +567,7 @@ void Interpretador(uint32_t AdrMAIN, uint32_t PC, uint8_t MovList[]){
 		
 		// Comando Fim Codigo
 		else if( SDbuffer[0] == 0xF8 ){
-			setbit(control, 0);							// Sai Loop Principal
+			SETBIT(control, 0);							// Sai Loop Principal
 		}
 	}
 	
@@ -582,70 +580,67 @@ uint32_t findFirmware(){
 	uint8_t SDbuffer[32];
 	uint8_t loop=1;
 	int i;
-	
-	SD_SendCMDCRC(16, 32,0);
-	cli();	// desativa interrupcoes
+
+	cli();												// disable Interruptions
 	while( loop ){
-		SD_SendCMDCRC(17, adr , 0); SD_EsperaToken();
-		for( i=0; i<32; i++) SDbuffer[i] = SD_Read();
-		SD_Read(); SD_Read(); SD_Read(); //  crc
+		if( SD_ReadSingleBlock(adr, 32, SDbuffer) )
+		{
+			if( adr==0 && SDbuffer[0x00] == 0x31 && (SDbuffer[0x10]==0x31 || SDbuffer[0x10]==0xF8) ) loop = 0;
 		
-		if( adr==0 && SDbuffer[0x00] == 0x31 && (SDbuffer[0x10]==0x31 || SDbuffer[0x10]==0xF8) ) loop = 0;
-		
-		// Setor da Particao de Boot
-		else if( SDbuffer[0]==0xEB && SDbuffer[1]==0x3C && SDbuffer[2]==0x90 ){
-			temp2 = SDbuffer[0xC]; temp2 <<= 8;
-			temp2 |= SDbuffer[0xB];
+			// Setor da Particao de Boot
+			else if( SDbuffer[0]==0xEB && SDbuffer[1]==0x3C && SDbuffer[2]==0x90 )
+			{
+				temp2 = SDbuffer[0xC]; temp2 <<= 8;
+				temp2 |= SDbuffer[0xB];
 			
-			temp1 = SDbuffer[0x17]; temp1 <<= 8;
-			temp1 |= SDbuffer[0x16];
-			temp1 = temp1 * temp2;		// Tamanho da tabela de alocacao
+				temp1 = SDbuffer[0x17]; temp1 <<= 8;
+				temp1 |= SDbuffer[0x16];
+				temp1 = temp1 * temp2;					// Tamanho da tabela de alocacao
 			
-			temp2 = SDbuffer[0x10];		
-			temp1 = temp1 * temp2;
-			
-			adr += temp1;
-			
-			temp2 = SDbuffer[0xC]; temp2 <<= 8;
-			temp2 |= SDbuffer[0xB];
-			temp1 = SDbuffer[0xF]; temp1 <<= 8;
-			temp1 |= SDbuffer[0xE];
-			temp1 = temp1 * temp2;
-			
-			adr += temp1;	// Endereco da tabela de Diretorios
-			
-			temp1 = SDbuffer[0xD];	// setores por Cluster
-			temp1 = temp1 * temp2;	// Bytes por Cluster
-			
-			// Procura pelo Firmware
-			for( i=0; i<512; i++){
-				temp2 = i * 32;
-				SD_SendCMDCRC(17, adr + temp2 , 0); SD_EsperaToken();
-				for( int j=0; j<32; j++) SDbuffer[j] = SD_Read();
-				SD_Read(); SD_Read(); SD_Read(); //  crc
+				temp2 = SDbuffer[0x10];		
+				temp1 = temp1 * temp2;
 				
-				if( (SDbuffer[0]=='F'||SDbuffer[0]=='f') && (SDbuffer[1]=='I'||SDbuffer[1]=='i') && 
-				(SDbuffer[2]=='R'||SDbuffer[2]=='r') && (SDbuffer[3]=='M'||SDbuffer[3]=='m') &&
-				SDbuffer[4]==' ' &&	SDbuffer[5]==' ' && SDbuffer[6]==' ' && SDbuffer[7]==' ' &&
-				(SDbuffer[8]=='H'||SDbuffer[8]=='h')&&(SDbuffer[9]=='E'||SDbuffer[9]=='e')&&(SDbuffer[10]=='X'||SDbuffer[10]=='x')){
-					temp2 = SDbuffer[0x1B]; temp2 <<= 8;
-					temp2 |= SDbuffer[0x1A]; temp2 -= 2;
-					temp1 = temp1 * temp2;		// posicao relativa do inicio do arquivo
+				adr += temp1;
+				
+				temp2 = SDbuffer[0xC]; temp2 <<= 8;
+				temp2 |= SDbuffer[0xB];
+				temp1 = SDbuffer[0xF]; temp1 <<= 8;
+				temp1 |= SDbuffer[0xE];
+				temp1 = temp1 * temp2;
+				
+				adr += temp1;							// Endereco da tabela de Diretorios
+				
+				temp1 = SDbuffer[0xD];					// setores por Cluster
+				temp1 = temp1 * temp2;					// Bytes por Cluster
+				
+				// Procura pelo Firmware
+				for( i=0; i<512; i++){
+					temp2 = i * 32;
+					SD_ReadSingleBlock(adr + temp2, 32, SDbuffer);
 					
-					i = 512;
-					adr += 0x4000 + temp1;
+					if( (SDbuffer[0]=='F'||SDbuffer[0]=='f') && (SDbuffer[1]=='I'||SDbuffer[1]=='i') && 
+					(SDbuffer[2]=='R'||SDbuffer[2]=='r') && (SDbuffer[3]=='M'||SDbuffer[3]=='m') &&
+					SDbuffer[4]==' ' &&	SDbuffer[5]==' ' && SDbuffer[6]==' ' && SDbuffer[7]==' ' &&
+					(SDbuffer[8]=='H'||SDbuffer[8]=='h')&&(SDbuffer[9]=='E'||SDbuffer[9]=='e')&&(SDbuffer[10]=='X'||SDbuffer[10]=='x')){
+						temp2 = SDbuffer[0x1B]; temp2 <<= 8;
+						temp2 |= SDbuffer[0x1A]; temp2 -= 2;
+						temp1 = temp1 * temp2;			// posicao relativa do inicio do arquivo
+					
+						i = 512;
+						adr += 0x4000 + temp1;
+					}
+					// se Firmware nao encontrado
+					else if( i == 511 ){
+						adr = 0xFFFFFFFF;
+					}
 				}
-				// se Firmware nao encontrado
-				else if( i == 511 ){
-					adr = 0xFFFFFFFF;
-				}
+
+				loop = 0;
 			}
-			
-			
-			loop = 0;
-		}
-		else {
-			adr += 512;
+			else 
+			{
+				adr += 512;
+			}
 		}
 	}
 	
@@ -708,9 +703,9 @@ void Resolvedor(uint32_t AdrMain){
 	UART_Write(10); UART_Write(13);
 	// Envia a Lista de movimentos da Solucao via Porta Serial
 	for(int i=0; i<MovListIndex; i++){
-		if( testbit(MovList[i], 4) ) UART_Write('2');
+		if( GETBIT(MovList[i], 4) ) UART_Write('2');
 		UART_Write('M'); UART_Write((MovList[i]&7)+0x30);
-		if( testbit(MovList[i], 3) )UART_Write('\'');
+		if( GETBIT(MovList[i], 3) )UART_Write('\'');
 		UART_Write(10); UART_Write(13);
 	}
 	UART_Write(10); UART_Write(13);
@@ -731,10 +726,11 @@ void Resolvedor(uint32_t AdrMain){
 		for( i=0 ; listBracos[i] != 0 ; i++ ){
 //			LeituraBotoes();
 			SetMov(listBracos[i]);
+			//SetMov2(listBracos[i]);
 			
-			if( testbit(listBracos[i], 2) ) UART_Write('R');
-			else if( testbit(listBracos[i], 3) ) UART_Write('B');
-			else if( testbit(listBracos[i], 4) ) UART_Write('C');
+			if( GETBIT(listBracos[i], 2) ) UART_Write('R');
+			else if( GETBIT(listBracos[i], 3) ) UART_Write('B');
+			else if( GETBIT(listBracos[i], 4) ) UART_Write('C');
 			UART_Write((listBracos[i]&0x3) + 0x30 );
 			UART_Write(' ');
 			
@@ -944,7 +940,7 @@ void LeituraBotoes (){
 
 
 void Init(){
-	clearbit(MCUCR, PUD);		// habilita pull-up
+	RSTBIT(MCUCR, PUD);		// habilita pull-up
 	
 	// Controle Servo
 	Servo_Init();
@@ -961,27 +957,23 @@ void Init(){
 	PORTC = 0x00;
 	DDRC = 0xFF;
 	
-	setbit(PORTD, 2);
-	clearbit(DDRD, 2);	// In
-	setbit(PORTD, 3);
-	clearbit(DDRD, 3);	// In
-	setbit(PORTD, 4);
-	clearbit(DDRD, 4);	// In
-	setbit(PORTD, 5);
-	clearbit(DDRD, 5);	// In
+	SETBIT(PORTD, 2);
+	RSTBIT(DDRD, 2);	// In
+	SETBIT(PORTD, 3);
+	RSTBIT(DDRD, 3);	// In
+	SETBIT(PORTD, 4);
+	RSTBIT(DDRD, 4);	// In
+	SETBIT(PORTD, 5);
+	RSTBIT(DDRD, 5);	// In
 	
-	//UART_init(500000);
-	UART_init(200000);
+	UART_init(250000);
 	//UART_init(57600);
-	//UART_init(9600);
 }
 
 int main(void)
 {
 	//OSCCAL = 0x87;
-	
 	Init();
-	
 	_delay_ms(1000);
 	
 Inicio:	
@@ -992,11 +984,11 @@ Inicio:
 	}
 	else {
 		piscaLed(1,0);
+		UART_Write('.');
+		UART_Write('?');
 		goto Inicio;
 	}
 	
-//	_delay_ms(2000);
-
 	// Loop Principal
     while(1)
     {
@@ -1013,6 +1005,7 @@ Inicio:
 					break;
 				
 				case 'r':
+					UART_Write('r');
 					AdrMain = findFirmware();
 				
 				case 't':

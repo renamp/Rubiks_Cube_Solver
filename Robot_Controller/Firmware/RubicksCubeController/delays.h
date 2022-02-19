@@ -5,6 +5,9 @@
  *  Author: Renan
  */ 
 
+#ifndef DELAYS_H_
+#define DELAYS_H_
+
 #define F_CPU 8000000
 
 #include <util/delay.h>
@@ -18,3 +21,5 @@ void delay_100ms();
 void delay_500ms();
 
 void delay_ms(int delay);
+
+#endif /* DELAYS_H_ */
