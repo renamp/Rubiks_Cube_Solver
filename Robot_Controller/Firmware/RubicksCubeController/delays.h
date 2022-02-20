@@ -8,8 +8,6 @@
 #ifndef DELAYS_H_
 #define DELAYS_H_
 
-#define F_CPU 8000000
-
 #include <util/delay.h>
 
 void delay_1us();

@@ -4,35 +4,10 @@
  * Created: 22/02/2015 01:08:00
  *  Author: Renan
  *
- * 
- 
- Portas Utilizadas
- *  PB 4:6, PE 2:3, PD 0:7		Camera
- *  PG 0:2						Servos
- *  PC 0:3						Botoes
- *
  *
  */ 
  
-#define F_CPU 8000000
-
-#define ServoDelay (255-120)	// 16,6ms
-#define sleep _delay_us(5);
-
-// Botoes
-#define buttonRed		0x04
-#define buttonGreen		0x08
-#define buttonBlue		0x10
-#define buttonYellow	0x20
-
-
-#include <avr/io.h>
-#include <util/delay.h>
-#include <avr/interrupt.h>
-#include "delays.h"
-#include "UART.h"
-#include "Bits.h"
-#include "SD.h"
+#include "RubicksCubeController.h"
 
 //uint8_t m[6][9];
 uint8_t m[6][9] = {
@@ -44,17 +19,50 @@ uint8_t m[6][9] = {
 	{2, 2, 3, 5, 5, 4, 2, 4, 4}
 };
 	
-uint8_t orientacaoCubo;
-uint8_t centroCubo[6] = {0,1,2,3,4,5};
-uint16_t MovListIndex;
+static uint8_t orientacaoCubo;
+static uint8_t centroCubo[6] = {0,1,2,3,4,5};
+static uint16_t MovListIndex;
+static uint8_t listBracos[12];
+static uint8_t servo1[8], servo2[2], servo3[3];
+static uint8_t servo1Index, servo2Index, servo3Index;
+static PortPin const	servo1Pin = {&PORTC, PINC3}, 
+						servo2Pin = {&PORTC, PINC4}, 
+						servo3Pin = {&PORTC, PINC5};
+static ServoPWM servo1PWM, servo2PWM, servo3PWM;
+uint8_t MenuState, servosState;
 
-uint8_t listBracos[12];
 
-uint8_t timeServo,MenuState;
-uint8_t servo1[8], servo2[2], servo3[3], servo1Index, servo2Index, servo3Index;
-uint8_t servo1Position, servo2Position, servo3Position;
+static void ServoLoad()
+{
+	for( int i=0; i<8; i++)	servo1[i] = EEPROM_read(i+16);
+	for( int i=0; i<2; i++)	servo2[i] = EEPROM_read(i+24);
+	for( int i=0; i<3; i++)	servo3[i] = EEPROM_read(i+26);
+	servo1Index = 1;
+	servo2Index = 0;
+	servo3Index = 0;
+}
 
-const PORT spi_clock_port = {&PORTB, &DDRB, &PINB, PINB5};
+static void ServoSave()
+{
+	for( int i=0; i<8; i++) EEPROM_write(i+16, servo1[i]);
+	for( int i=0; i<2; i++) EEPROM_write(i+24, servo2[i]);
+	for( int i=0; i<3; i++) EEPROM_write(i+26, servo3[i]);
+}
+
+static void DisableInterrupt()
+{
+	while(servosState != 0);
+	TIMSK0 = 0x00;		// Overflow Interrupt
+	cli();
+}
+
+static void EnableInterrupt()
+{
+	servosState = 0;
+	TCNT0 = 220;
+	TIMSK0 = 0x01;		// Overflow Interrupt
+	sei();
+}
 
 void Interpretador(uint32_t AdrMAIN, uint32_t PC, uint8_t MovList[]);
 
@@ -82,21 +90,7 @@ void piscaData(uint8_t data ){
 }
 
 
-uint8_t EEPROM_read(uint16_t Adr)
-{
-	while(EECR & (1<<EEPE));
-	EEAR = Adr;
-	EECR |= (1<<EERE);
-	return EEDR;
-}
-void EEPROM_write(uint16_t adr, char data)
-{
-	while(EECR & (1<<EEPE));
-	EEAR = adr;
-	EEDR = data;
-	EECR |= (1<<EEMPE);
-	EECR |= (1<<EEPE);
-}
+
 
 void ADDMovimento( int face, uint8_t MovList[] ){
 	// se for movimento na mesma face
@@ -152,64 +146,33 @@ void Move( uint8_t face, uint8_t MovList[] ){
 	}
 }
 
-void wait(uint8_t time){
-	for(uint8_t i=0; i<time; i++ ){
-		_delay_us(10);
-	}
-}
-
-void ServoLoad(){
-	for( int i=0; i<8; i++)	servo1[i] = EEPROM_read(i+16);
-	for( int i=0; i<2; i++)	servo2[i] = EEPROM_read(i+24);
-	for( int i=0; i<3; i++)	servo3[i] = EEPROM_read(i+26);
-}
-
-void Servo_Init(){
-	SETBIT(DDRC, 3);
-	SETBIT(DDRC, 4);
-	SETBIT(DDRC, 5);
-	
-	RSTBIT(PORTC, 3);
-	RSTBIT(PORTC, 4);
-	RSTBIT(PORTC, 5);
-	
-	
-	timeServo = 0;
-	MenuState = 0;
-	
-	ServoLoad();
-	
-	servo1Index = 1;
-	servo2Index = 0;
-	servo3Index = 2;
-}
-
-void ServosUpdate( ){
-
-	SETBIT(PORTC, 3);
-	_delay_us(600);
-	wait(servo1[servo1Index]);
-	RSTBIT(PORTC, 3);
-	
-	SETBIT(PORTC, 4);
-	_delay_us(600);
-	wait(servo2[servo2Index]);
-	RSTBIT(PORTC, 4);
-	
-	SETBIT(PORTC, 5);
-	_delay_us(600);
-	wait(servo3[servo3Index]);
-	RSTBIT(PORTC, 5);
-}
-
 /////////////////////////////////////////////////
 // Timer Interrupt
 ISR( TIMER0_OVF_vect ){
-	ServosUpdate();
-	TCNT0 = ServoDelay;
+	TCCR0B = 0x03;
+	if(servosState == 0) servosState++;
+	
+	if(servosState == 1 
+	  && ServoPWM_ISR(&servo1PWM, &servo1Pin, &TCNT0) == true)
+		servosState++;
+	
+	if(servosState == 2 
+	  && ServoPWM_ISR(&servo2PWM, &servo2Pin, &TCNT0) == true)
+		servosState++;
+		
+	if(servosState == 3
+	  && ServoPWM_ISR(&servo3PWM, &servo3Pin, &TCNT0) == true)
+		servosState++;
+	
+	if( servosState > 3 )
+	{	// set a bigger time before restart from servo 1
+		TCCR0B = 0x05;
+		TCNT0 = 70;
+		servosState = 0;
+	}
 }
 
-/*//////////////////////////////////////////
+/**  //////////////////////////////////////////
 // Rotina para Movimentacao dos Bracos
 // Bit 0:1	Determina a posicao dos bracos
 // Bit 2    Determina se � pra rotacionar uma Face
@@ -220,20 +183,19 @@ void SetMov( uint8_t movimento ){
 	uint8_t posicao = (movimento & 0x03);
 	// se Rotacionar Face
 	if( GETBIT(movimento, 2 ) ){
-		servo2Index = 1;			// abaixa apoio lateral
-		_delay_ms(300);				// espera 100 ms
-		int delay = 350;
-		if( posicao == 0 ){if(servo1Index==7)delay=600;servo1Index = 0;}			// rotaciona para a posicao 0
-		else if( posicao == 2 ){if(servo1Index==1)delay=600;servo1Index = 6;}		// rotaciona para a posicao 2
-		else if( posicao == 1 && servo1Index == 1) servo1Index = 2;					// rotaciona para o meio
-		else if( posicao == 1 && servo1Index == 7) servo1Index = 4;					// rotaciona para o meio
-
-		delay_ms(delay);
-		servo1Index++;
-		_delay_ms(200); //80
+		ServoPWM_MoveWait(&servo2PWM, &servo2Pin, servo2[1], 10);	// Lower cuber lateral holder
 		
-		servo2Index = 0;			// Levanta apoio lateral
-		_delay_ms(150);		//200		// espera 100 ms
+		int delay = 350;
+		if( posicao == 0 ){if(servo1Index==7)delay=600;servo1Index = 0;}		// rotaciona para a posicao 0
+		else if( posicao == 2 ){if(servo1Index==1)delay=600;servo1Index = 6;}	// rotaciona para a posicao 2
+		else if( posicao == 1 && servo1Index == 1) servo1Index = 2;				// rotaciona para o meio
+		else if( posicao == 1 && servo1Index == 7) servo1Index = 4;				// rotaciona para o meio
+		
+		ServoPWM_MoveWait(&servo1PWM, &servo1Pin, servo1[servo1Index], 15);		// Rotate base
+		servo1Index++;
+		ServoPWM_MoveWait(&servo1PWM, &servo1Pin, servo1[servo1Index], 15);
+		
+		ServoPWM_MoveWait(&servo2PWM, &servo2Pin, servo2[0], 10);	// Rise cuber lateral holder
 	}
 	
 	// se Rotacionar Base
@@ -255,7 +217,8 @@ void SetMov( uint8_t movimento ){
 		else if( posicao == 2 ){if(servo1Index==1)delay=500; servo1Index = 7;}
 		else if( posicao == 1 && servo1Index == 1 ) servo1Index = 3;
 		else if( posicao == 1 && servo1Index == 7 ) servo1Index = 5;
-		delay_ms(delay);
+		ServoPWM_MoveWait(&servo1PWM, &servo1Pin, servo1[servo1Index], 15);		// Rotate base
+		_delay_ms(300);
 	}
 	
 	// Mudar Face
@@ -266,12 +229,10 @@ void SetMov( uint8_t movimento ){
 			centroCubo[0] = centroCubo[5]; centroCubo[5] = centroCubo[2]; 
 			centroCubo[2] = centroCubo[4]; centroCubo[4] = orientacaoCubo;
 			
-			servo3Index = 0;
-			_delay_ms(350);
-			servo3Index = 1;
-			_delay_ms(350);
-			servo3Index = 2;
-			_delay_ms(250);
+			ServoPWM_MoveWait(&servo3PWM, &servo3Pin, servo3[1], 50); //servo3Index = 1;
+			_delay_ms(150);
+			ServoPWM_MoveWait(&servo3PWM, &servo3Pin, servo3[2], 6);  //servo3Index = 2;
+			ServoPWM_MoveWait(&servo3PWM, &servo3Pin, servo3[0], 20); //servo3Index = 3;
 		}
 	}
 	
@@ -317,7 +278,6 @@ void SetMov2( uint8_t movimento ){
 		else if( posicao == 2 ) servo1Index = 7;
 		else if( posicao == 1 && servo1Index == 1 ) servo1Index = 3;
 		else if( posicao == 1 && servo1Index == 7 ) servo1Index = 5;
-		//timeServo = 245;			// seta para esperar 10*16ms
 		//		_delay_ms(600);
 	}
 	
@@ -339,7 +299,6 @@ void SetMov2( uint8_t movimento ){
 	}
 	//	_delay_ms(50);
 }
-
 
 void printCube(uint8_t modo){
 
@@ -372,7 +331,7 @@ void Interpretador(uint32_t AdrMAIN, uint32_t PC, uint8_t MovList[]){
 	PCn2 = 0;
 	ServoListIndex = 0;
 	
-	cli();	// desativa interrupcoes
+	DisableInterrupt();
 	
 	// determina posicao da base do Cubo
 	uint8_t baseCubo = 0;
@@ -571,8 +530,7 @@ void Interpretador(uint32_t AdrMAIN, uint32_t PC, uint8_t MovList[]){
 		}
 	}
 	
-	ServoLoad();		// Atualiza posicoes dos servos
-	sei();				// Habilita Interrupcao
+	EnableInterrupt();
 }
 
 uint32_t findFirmware(){
@@ -581,7 +539,7 @@ uint32_t findFirmware(){
 	uint8_t loop=1;
 	int i;
 
-	cli();												// disable Interruptions
+	DisableInterrupt();
 	while( loop ){
 		if( SD_ReadSingleBlock(adr, 32, SDbuffer) )
 		{
@@ -644,33 +602,8 @@ uint32_t findFirmware(){
 		}
 	}
 	
-	ServoLoad();		// Atualiza posicoes dos servos
-	sei();				// Habilita Interrupcao
+	EnableInterrupt();
 	return adr;
-}
-
-void TestServos(){
-	uint8_t loop = 1;
-	uint8_t buffer;
-	
-	while( loop ){
-		if( UART_DataIsReady() ){
-			buffer = UART_Read();
-			if( buffer == 0x33 ){
-				while(!UART_DataIsReady());
-				buffer = UART_Read();
-				
-				if( buffer == 0x31 ){
-					while(!UART_DataIsReady());
-					buffer = UART_Read();
-					
-					servo1[1] = buffer;
-				}
-			}
-			else if( buffer == 0xF8 )
-			loop = 0;
-		}
-	}
 }
 
 void setMatrix(){
@@ -805,13 +738,10 @@ void LeituraBotoes (){
 		{
 			// Salvar e Sair
 			if( Button == (buttonBlue|buttonYellow) ){
+				ServoSave();
 				MenuState = 0;
-				for( int i=0; i<8; i++) EEPROM_write(i+16, servo1[i]);
-				for( int i=0; i<2; i++) EEPROM_write(i+24, servo2[i]);
-				for( int i=0; i<3; i++) EEPROM_write(i+26, servo3[i]);
-				
 				servo2Index = 0;
-				servo3Index = 2;
+				servo3Index = 0;
 				servo1Index = 1;
 			}
 			// Incrementa valor da posicao
@@ -892,6 +822,12 @@ void LeituraBotoes (){
 				}
 				_delay_ms(200);
 			}
+			servo1PWM.targetPos = servo1[servo1Index];
+			servo1PWM.speed = 20;
+			servo2PWM.targetPos = servo2[servo2Index];
+			servo2PWM.speed = 20;
+			servo3PWM.targetPos = servo3[servo3Index];
+			servo3PWM.speed = 20;
 		}
 		
 		/////////////////////////////////////////////////////////////////
@@ -942,16 +878,17 @@ void LeituraBotoes (){
 void Init(){
 	RSTBIT(MCUCR, PUD);		// habilita pull-up
 	
-	// Controle Servo
-	Servo_Init();
+	// Servos
+	ServoLoad();
+	ServoPWM_Init(&servo1PWM, &servo1Pin, servo1[servo1Index]);
+	ServoPWM_Init(&servo2PWM, &servo2Pin, servo2[servo2Index]);
+	ServoPWM_Init(&servo3PWM, &servo3Pin, servo3[servo3Index]);
 	
 	// Config Timer Interrupt
 	TCCR0A	 = 0x00;
 	TCCR0B   = 0x05;	// pres:1024
 	TCNT0 = ServoDelay;	// 16,6ms
 	TIMSK0 = 0x01;		// Overflow Interrupt
-	sei();				// Enable all Interrupts
-	
 	
 	// Enable Botoes
 	PORTC = 0x00;
@@ -968,11 +905,13 @@ void Init(){
 	
 	UART_init(250000);
 	//UART_init(57600);
+	
+	MenuState = 0;
+	sei();				// Enable all Interrupts
 }
 
 int main(void)
 {
-	//OSCCAL = 0x87;
 	Init();
 	_delay_ms(1000);
 	

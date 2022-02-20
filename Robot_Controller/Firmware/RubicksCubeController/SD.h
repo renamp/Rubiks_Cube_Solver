@@ -9,7 +9,6 @@
 #ifndef SD_H_HEADER
 #define SD_H_HEADER
 
-#define F_CPU 8000000
 #define SD_DISABLE() SETBIT(PORTB, 2);			// Desativa	SD
 #define SD_ENABLE() RSTBIT(PORTB, 2);			// Ativa	SD
 #define _STATUS_MMC	0x01
